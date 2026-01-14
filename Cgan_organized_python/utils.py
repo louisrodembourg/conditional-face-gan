@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import random
 import os
+import torchvision.utils as vutils
 from config import DEVICE
 
 # 1. Reproductibilité
@@ -73,3 +74,44 @@ class LinearDecayLR:
 
     def step(self, epoch):
         return 1.0 - max(0, epoch + self.offset - self.decay_start_epoch) / (self.n_epochs - self.decay_start_epoch)
+# 6. Disentanglement Visualization
+def make_attribute_grid(netG, z_dim, num_classes, device, n_points=10):
+    """
+    Crée une grille de visualisation où chaque ligne correspond à l'interpolation d'un attribut (0 -> 1).
+    On utilise le MÊME vecteur de bruit z pour toute la grille.
+    """
+    netG.eval()
+    
+    # 1. Un z fixe pour une personne de base (Identity)
+    # (1, 100, 1, 1)
+    base_z = torch.randn(1, z_dim, 1, 1).to(device)
+    
+    # 2. Des labels de base (Tout à 0 par défaut pour bien voir l'effet de l'ajout)
+    # 0 = Femme, Brune, Pas Souriante, Pas Lunettes, Vieux
+    base_labels = torch.zeros(1, num_classes).to(device) 
+    
+    all_imgs = []
+    
+    # Pour chaque attribut (chaque ligne de la grille)
+    for attr_idx in range(num_classes):
+        # On crée n_points images pour la transition
+        vals = torch.linspace(0, 1, n_points).to(device)
+        
+        # On duplique le z et les labels de base
+        batch_z = base_z.repeat(n_points, 1, 1, 1)
+        batch_labels = base_labels.repeat(n_points, 1)
+        
+        # On fait varier SEULEMENT l'attribut courant
+        batch_labels[:, attr_idx] = vals
+        
+        # Génération
+        with torch.no_grad():
+            gen_imgs = netG(batch_z, batch_labels)
+        
+        all_imgs.append(gen_imgs)
+        
+    # Concaténer tout (Num_Attr * N_Points, 3, 128, 128)
+    all_imgs = torch.cat(all_imgs, dim=0)
+    
+    # Faire une grille (nrow = n_points pour avoir une ligne par attribut)
+    return vutils.make_grid(all_imgs, nrow=n_points, normalize=True, padding=2)

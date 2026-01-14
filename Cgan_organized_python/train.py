@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from config import *
 from models import Generator, Discriminator
-from utils import seed_everything, weights_init, compute_gradient_penalty, compute_accuracy, LinearDecayLR
+from utils import seed_everything, weights_init, compute_gradient_penalty, compute_accuracy, LinearDecayLR, make_attribute_grid
 from data import get_dataloaders
 
 # Import pour le FID (nécessite fonction locale ou script externe)
@@ -18,8 +18,8 @@ import subprocess
 
 def prepare_fid_folders(netG, test_loader, run_name, epoch):
     """Génère les images réelles et fausses pour le calcul FID"""
-    real_dir = os.path.join("fid_outputs", "real")
-    fake_dir = os.path.join("fid_outputs", f"fake_{run_name}_ep{epoch}")
+    real_dir = os.path.join(FID_OUTPUTS_DIR, "real")
+    fake_dir = os.path.join(FID_OUTPUTS_DIR, f"fake_{run_name}_ep{epoch}")
     os.makedirs(real_dir, exist_ok=True)
     os.makedirs(fake_dir, exist_ok=True)
     
@@ -117,6 +117,10 @@ def train():
             gp = compute_gradient_penalty(netD, real_imgs.data, fake_imgs.data)
             
             d_loss = d_loss_real + d_loss_fake + LAMBDA_GP * gp + LAMBDA_CLS * d_loss_cls
+            
+            # --- CALCUL ACCURACY (REAL) ---
+            acc_real = compute_accuracy(real_cls, real_labels)
+            
             d_loss.backward()
             optimizerD.step()
             
@@ -128,14 +132,29 @@ def train():
                 g_loss_adv = -torch.mean(fake_validity)
                 g_loss_cls = cls_criterion(fake_cls, fake_labels_in)
                 
+                # --- CALCUL ACCURACY (FAKE) ---
+                acc_fake = compute_accuracy(fake_cls, fake_labels_in)
+                
                 g_loss = g_loss_adv + LAMBDA_CLS * g_loss_cls
                 g_loss.backward()
                 optimizerG.step()
                 
                 if global_step % 50 == 0:
-                    writer.add_scalar('Loss/D', d_loss.item(), global_step)
-                    writer.add_scalar('Loss/G', g_loss.item(), global_step)
-                    writer.add_scalar('Loss/W_Dist', -(d_loss_real+d_loss_fake).item(), global_step)
+                    # 1. Pertes principales
+                    writer.add_scalar('Loss/D_Total', d_loss.item(), global_step)
+                    writer.add_scalar('Loss/G_Total', g_loss.item(), global_step)
+                    
+                    # 2. Détails WGAN
+                    writer.add_scalar('WGAN/Wasserstein_Dist', -(d_loss_real+d_loss_fake).item(), global_step)
+                    writer.add_scalar('WGAN/Gradient_Penalty', gp.item(), global_step)
+                    
+                    # 3. Détails Classification (AC-GAN)
+                    writer.add_scalar('Classification/Real_Images', d_loss_cls.item(), global_step)
+                    writer.add_scalar('Classification/Fake_Images', g_loss_cls.item(), global_step)
+                    
+                    # 4. Accuracy (Reconnaissance des Attributs)
+                    writer.add_scalar('Accuracy_Attributes/Real', acc_real.item(), global_step)
+                    writer.add_scalar('Accuracy_Attributes/Fake', acc_fake.item(), global_step)
                     
             global_step += 1
             
@@ -146,9 +165,16 @@ def train():
         # Save & Visu
         with torch.no_grad():
             netG.eval()
+            
+            # 1. Grille Aléatoire standard
             fake = netG(fixed_z, fixed_labels).detach().cpu()
             grid = vutils.make_grid(fake, padding=2, normalize=True)
-            writer.add_image('Generated', grid, epoch)
+            writer.add_image('Generated_Random', grid, epoch)
+            
+            # 2. Grille de Disentanglement (Variation Attributs)
+            dis_grid = make_attribute_grid(netG, Z_DIM, NUM_CLASSES, DEVICE)
+            writer.add_image('Disentanglement_Grid_Interpolation', dis_grid, epoch)
+            
             netG.train()
             
         # Checkpoint

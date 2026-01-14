@@ -9,12 +9,17 @@ else:
     DEVICE = torch.device("cpu")
 
 # --- PATHS ---
-DATA_ROOT = 'Project/Cgan_project_Parme/data'
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Dossier contenant config.py (Cgan_organized_python)
+PROJECT_ROOT = os.path.dirname(BASE_DIR) # Dossier parent (Cgan_project_Parme)
+
+DATA_ROOT = os.path.join(PROJECT_ROOT, 'data')
 ATTR_FILE = os.path.join(DATA_ROOT, 'list_attr_celeba.csv')
-IMG_DIR = os.path.join(DATA_ROOT, 'img_align_celeba') # Vérifie ton chemin exact
-LOG_DIR = 'Project/Cgan_project_Parme/logs'
-CKPT_DIR = 'Project/Cgan_project_Parme/checkpoints'
-RESULTS_DIR = 'Project/Cgan_project_Parme/generated_results'
+IMG_DIR = os.path.join(DATA_ROOT, 'img_align_celeba/img_align_celeba') # Chemin corrigé pour matcher le notebook (img_align_celeba/img_align_celeba)
+LOG_DIR = os.path.join(PROJECT_ROOT, 'logs')
+CKPT_DIR = os.path.join(PROJECT_ROOT, 'checkpoints')
+RESULTS_DIR = os.path.join(PROJECT_ROOT, 'generated_results')
+FID_OUTPUTS_DIR = os.path.join(PROJECT_ROOT, 'fid_outputs')
 
 # --- HYPERPARAMETRES ---
 IMAGE_SIZE = 128

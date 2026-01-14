@@ -4,3 +4,32 @@ checkpoints/
 data/
 __pycache__/
 fid_outputs/
+
+# Poids / artefacts ML
+*.pth
+*.pt
+*.onnx
+
+# Environnements / fichiers temporaires
+.venv/
+.env
+*.pyc
+.ipynb_checkpoints/
+
+# Builds / packaging
+build/
+dist/
+*.egg-info/
+
+# Caches / tests
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.log
