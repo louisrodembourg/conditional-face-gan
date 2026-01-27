@@ -1,15 +1,28 @@
-import torch
+"""
+Generation Module
+=================
+
+This module handles inference using trained Generator models.
+It supports:
+1. Single image generation with specific attributes.
+2. Grid generation showing all attribute combinations for a fixed latent vector.
+"""
+
 import os
-import itertools
 import re
+import itertools
+from typing import List, Optional, Tuple
+
+import torch
 import torchvision.utils as vutils
 from PIL import Image, ImageDraw, ImageFont
-from config import *
+
+import config
 from models import Generator
 
-def get_model_info(weights_path):
+def get_model_info(weights_path: str) -> Tuple[str, str]:
     """
-    Extrait le nom du run et l'époque/info du fichier de poids.
+    Extracts run name and epoch info from the weights filename/path.
     """
     weights_path = os.path.abspath(weights_path)
     dirname = os.path.dirname(weights_path)
@@ -19,7 +32,7 @@ def get_model_info(weights_path):
     if "best_fid" in filename:
         epoch = "Best FID"
     else:
-        # Chercher 'ep' suivi de chiffres
+        # Search for 'ep' followed by digits
         match = re.search(r'ep(\d+)', filename)
         if match:
             epoch = f"Epoch {match.group(1)}"
@@ -28,19 +41,19 @@ def get_model_info(weights_path):
             
     return run_name, epoch
 
-def add_banner_to_image(image_path, run_name, epoch, attr_text):
+def add_banner_to_image(image_path: str, run_name: str, epoch: str, attr_text: str):
     """
-    Ajoute un bandeau blanc avec les infos en haut de l'image.
-    Redimensionne l'image si elle est trop petite (< 512px de large) pour une meilleure visibilité.
+    Adds a white banner with metadata to the top of the generated image.
+    Upscales small images for better visibility.
     """
     try:
         img = Image.open(image_path)
     except Exception as e:
-        print(f"⚠️ Impossible d'ouvrir l'image pour ajouter le bandeau : {e}")
+        print(f"⚠️ Cannot open image to add banner: {e}")
         return
 
     # --- UPSCALING ---
-    # Si l'image est petite (ex: 128px), on l'agrandit pour qu'elle soit visible
+    # Upscale if image is small (e.g., 128px) for visibility
     original_w, original_h = img.size
     target_min_width = 512
     
@@ -48,37 +61,33 @@ def add_banner_to_image(image_path, run_name, epoch, attr_text):
         scale_factor = target_min_width / original_w
         new_w = int(original_w * scale_factor)
         new_h = int(original_h * scale_factor)
-        # NEAREST pour garder le côté "pixel art" réel du modèle, ou BICUBIC pour lisser
-        # On choisit NEAREST pour ne pas tricher sur la qualité, ou LANCZOS pour faire propre.
-        # Ici on prend LANCZOS (haute qualité) pour que ce soit "beau".
+        # Use LANCZOS for high quality upscaling
         img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         print(f"🔍 Upscaling image: {original_w}x{original_h} -> {new_w}x{new_h}")
 
     width, height = img.size
     
-    # Ajustement de la taille de police selon la largeur de l'image
+    # Adjust font size based on width
     if width < 200:
         font_size = 9 
     else:
-        font_size = max(14, int(width / 40)) # Police un peu plus grosse car image upscalée
+        font_size = max(14, int(width / 40))
     
-    # Chargement de la police
+    # Load Font
     font = None
     try:
-        # Essai Mac/Windows
         font = ImageFont.truetype("Arial.ttf", font_size)
     except:
         try:
-            # Essai Linux
+            # Linux fallback
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
         except:
             pass
             
     if font is None:
-        # Fallback
         font = ImageFont.load_default()
 
-    # Surface temporaire pour calculer les tailles
+    # Temporary Draw to calculate text size
     draw_temp = ImageDraw.Draw(Image.new('RGB', (1, 1)))
     
     def get_text_width(text, font):
@@ -87,19 +96,18 @@ def add_banner_to_image(image_path, run_name, epoch, attr_text):
         else:
             return draw_temp.textsize(text, font=font)[0]
 
-    max_width = width - 10 # Marge de 5px
+    max_width = width - 10 # 5px margin
     lines_to_draw = []
     
-    # Infos brutes
+    # Raw Info
     raw_lines = [f"Run: {run_name}", f"Model: {epoch}", f"Attrs: {attr_text}"]
     
     for raw_line in raw_lines:
-        # Si la ligne est trop longue, on vérifie
         current_width = get_text_width(raw_line, font)
         if current_width <= max_width:
             lines_to_draw.append(raw_line)
         else:
-            # Découpage caractère par caractère si ça dépasse
+            # Wrap text char by char if too long
             current_line = ""
             for char in raw_line:
                 test_line = current_line + char
@@ -111,8 +119,7 @@ def add_banner_to_image(image_path, run_name, epoch, attr_text):
             if current_line:
                 lines_to_draw.append(current_line)
 
-    # Espacement vertical
-    # Pour load_default(), la taille est fixe, donc line_height doit être suffisant
+    # Vertical spacing
     if font_size <= 10:
         line_height = 11
     else:
@@ -120,13 +127,11 @@ def add_banner_to_image(image_path, run_name, epoch, attr_text):
 
     banner_height = 10 + (len(lines_to_draw) * line_height) + 5
     
-    # Création nouvelle image avec bandeau
+    # Create new image with banner
     new_img = Image.new('RGB', (width, height + banner_height), color='white')
-    
-    # Collage de l'image originale
     new_img.paste(img, (0, banner_height))
     
-    # Dessin du texte
+    # Draw Text
     draw = ImageDraw.Draw(new_img)
     y_text = 8
     for line in lines_to_draw:
@@ -134,33 +139,33 @@ def add_banner_to_image(image_path, run_name, epoch, attr_text):
         y_text += line_height
         
     new_img.save(image_path)
-    print(f"✅ Bandeau ajouté : {run_name} | {epoch}")
+    print(f"✅ Banner added: {run_name} | {epoch}")
 
-def save_annotated_grid(tensor_batch, combinations, save_path):
+def save_annotated_grid(tensor_batch: torch.Tensor, combinations: List[Tuple[int, ...]], save_path: str):
     """
-    Crée une grille où chaque image a ses attributs écrits au-dessus.
+    Creates a grid where each image has its attributes written above it.
     """
     n_imgs = len(tensor_batch)
     cols = 8
     rows = (n_imgs + cols - 1) // cols
     
-    # Configuration des dimensions (Upscaling pour lisibilité)
+    # Dimensions (Upscaling for readability)
     cell_img_size = 256 
     header_height = 40
     cell_total_height = cell_img_size + header_height
     cell_total_width = cell_img_size
     
-    # Création de l'image de la grille entière
+    # Full Grid Image
     grid_img = Image.new('RGB', (cols * cell_total_width, rows * cell_total_height), color='white')
     draw = ImageDraw.Draw(grid_img)
     
-    # Police
+    # Font
     try:
         font = ImageFont.truetype("Arial.ttf", 14)
     except:
         font = ImageFont.load_default()
 
-    # Noms courts pour l'affichage
+    # Short naming for display
     short_names = {
             'Male': 'Male',
             'Blond_Hair': 'Blond',
@@ -170,134 +175,147 @@ def save_annotated_grid(tensor_batch, combinations, save_path):
     }
 
     for idx in range(n_imgs):
-        # 1. Traitement de l'image (Tensor -> PIL)
+        # 1. Process Image (Tensor -> PIL)
         t = tensor_batch[idx] # (3, 128, 128)
         # Denormalize (-1, 1) -> (0, 1)
         t = (t + 1) / 2.0
         t = t.clamp(0, 1)
         
-        # Conversion numpy
+        # Convert to numpy
         ndarr = t.mul(255).byte().permute(1, 2, 0).numpy()
         img = Image.fromarray(ndarr)
         
-        # Upscale (Nearest pour garder le grain ou Lanczos pour lisser)
+        # Upscale
         img = img.resize((cell_img_size, cell_img_size), Image.Resampling.LANCZOS)
         
-        # 2. Récupération des attributs actifs
+        # 2. Get Active Attributes
         combo = combinations[idx]
-        active = [short_names.get(ATTR_NAMES[i], ATTR_NAMES[i]) for i, val in enumerate(combo) if val == 1]
+        active = [short_names.get(config.ATTR_NAMES[i], config.ATTR_NAMES[i]) for i, val in enumerate(combo) if val == 1]
         
         if not active:
             label = "None"
         elif len(active) > 3:
-            label = ", ".join(active)
+            label = ", ".join(active[:3]) + "..."
         else:
             label = ", ".join(active)
             
-        # 3. Collage dans la grille
+        # 3. Paste into Grid
         r = idx // cols
         c = idx % cols
         x = c * cell_total_width
         y = r * cell_total_height
         
-        # Centrage du texte
+        # Center Text
         try:
-            # draw.textbbox is available in newer Pillow versions
-            # If not available, we can skip centering or use heuristic
             if hasattr(draw, 'textbbox'):
                 bbox = draw.textbbox((0, 0), label, font=font)
                 text_w = bbox[2] - bbox[0]
                 text_x = x + (cell_total_width - text_w) / 2
             else:
-                 # heuristic
                  text_x = x + 10
         except:
              text_x = x + 10
 
         draw.text((text_x, y + 10), label, fill='black', font=font)
-
-        # Collage image
         grid_img.paste(img, (x, y + header_height))
         
     grid_img.save(save_path)
 
-def generate_all_combinations(weights_path, num_grids=5):
+def generate_all_combinations(weights_path: str, num_grids: int = 5):
+    """
+    Generates grids of images for all possible attribute combinations.
+    """
     if not os.path.exists(weights_path):
-        print(f"❌ Erreur: Le fichier {weights_path} n'existe pas.")
+        print(f"❌ Error: File {weights_path} does not exist.")
         return
 
     run_name, epoch_info = get_model_info(weights_path)
-    print(f"⏳ Chargement du modèle : {run_name} ({epoch_info})...")
+    print(f"⏳ Loading model: {run_name} ({epoch_info})...")
     
     try:
-        netG = Generator(Z_DIM, NUM_CLASSES, img_size=IMAGE_SIZE).to(DEVICE)
-        netG.load_state_dict(torch.load(weights_path, map_location=DEVICE))
-        print("✅ Modèle chargé avec succès.")
+        netG = Generator(config.Z_DIM, config.NUM_CLASSES, img_size=config.IMAGE_SIZE).to(config.DEVICE)
+        netG.load_state_dict(torch.load(weights_path, map_location=config.DEVICE))
+        print("✅ Model loaded successfully.")
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des poids : {e}")
+        print(f"❌ Error loading weights: {e}")
         return
 
     netG.eval()
     
-    combinations = list(itertools.product([0, 1], repeat=NUM_CLASSES))
+    combinations = list(itertools.product([0, 1], repeat=config.NUM_CLASSES))
     num_images = len(combinations)
-    labels = torch.tensor(combinations).float().to(DEVICE)
+    labels = torch.tensor(combinations).float().to(config.DEVICE)
     
-    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(config.RESULTS_DIR, exist_ok=True)
     
-    print(f"🎨 Génération de {num_grids} grilles différentes...")
+    print(f"🎨 Generating {num_grids} different grids...")
 
     for i in range(num_grids):
-        # On génère une nouvelle "personne" (vecteur Z) pour chaque grille
-        fixed_z = torch.randn(1, Z_DIM, 1, 1).to(DEVICE).repeat(num_images, 1, 1, 1)
+        # Generate new random "person" (latent Z) for each grid
+        fixed_z = torch.randn(1, config.Z_DIM, 1, 1).to(config.DEVICE).repeat(num_images, 1, 1, 1)
         
         with torch.no_grad():
             fake_images = netG(fixed_z, labels).detach().cpu()
         
-        save_path = os.path.join(RESULTS_DIR, f"all_combinations_grid_{i+1}.png")
+        save_path = os.path.join(config.RESULTS_DIR, f"all_combinations_grid_{i+1}.png")
         
-        # Sauvegarde AVEC annotations par image
+        # Save WITH annotations 
         save_annotated_grid(fake_images, combinations, save_path)
         
-        # Ajout du bandeau général
+        # Add banner
         attr_text = "Grid of 32 Combinations"
         add_banner_to_image(save_path, run_name, epoch_info, attr_text)
         
-        print(f"   -> Grille {i+1} sauvegardée avec toutes les annotations : {save_path}")
+        print(f"   -> Grid {i+1} saved with annotations: {save_path}")
 
-    print(f"✅ Terminé.")
+    print(f"✅ Finished.")
 
-def generate_inference(weights_path, specific_attrs=None):
-    
+def generate_inference(weights_path: str, specific_attrs: Optional[List[int]] = None):
+    """
+    Generates a single image with specific attributes.
+    """
     if not os.path.exists(weights_path):
-        print(f"❌ Erreur: Le fichier {weights_path} n'existe pas.")
+        print(f"❌ Error: File {weights_path} does not exist.")
         return
 
     run_name, epoch_info = get_model_info(weights_path)
 
-
     if specific_attrs is None:
-        specific_attrs = (torch.rand(NUM_CLASSES) > 0.5).int().tolist()
+        # Default random (sanity check)
+        specific_attrs = (torch.rand(config.NUM_CLASSES) > 0.5).int().tolist()
     
-    print(f"⏳ Chargement du modèle : {run_name} ({epoch_info})...")
+    print(f"⏳ Loading model: {run_name} ({epoch_info})...")
     
     try:
-        # On essaie de charger avec l'architecture par défaut (128x128)
-        # Si le modèle a été entraîné avec img_size=64, il faudrait détecter ou passer un argument.
-        # Ici on suppose 128 par défaut (config.py).
-        netG = Generator(Z_DIM, NUM_CLASSES, img_size=IMAGE_SIZE).to(DEVICE)
-        netG.load_state_dict(torch.load(weights_path, map_location=DEVICE))
-        print("✅ Modèle chargé avec succès.")
+        netG = Generator(config.Z_DIM, config.NUM_CLASSES, img_size=config.IMAGE_SIZE).to(config.DEVICE)
+        netG.load_state_dict(torch.load(weights_path, map_location=config.DEVICE))
+        print("✅ Model loaded successfully.")
     except Exception as e:
-        print(f"❌ Erreur lors du chargement des poids : {e}")
-        print("Vérifiez que le checkpoint correspond à l'architecture actuelle.")
+        print(f"❌ Error loading weights: {e}")
         return
 
-    # --- SUITE DU SCRIPT ---
     netG.eval()
 
-    z = torch.randn(1, Z_DIM, 1, 1).to(DEVICE)
-    labels = torch.tensor([specific_attrs]).float().to(DEVICE)
+    z = torch.randn(1, config.Z_DIM, 1, 1).to(config.DEVICE)
+    labels = torch.tensor([specific_attrs]).float().to(config.DEVICE)
+    
+    with torch.no_grad():
+        fake_img = netG(z, labels).detach().cpu()
+    
+    # Save Image
+    os.makedirs(config.RESULTS_DIR, exist_ok=True)
+    save_path = os.path.join(config.RESULTS_DIR, f"generated_img.png")
+    
+    vutils.save_image(fake_img, save_path, normalize=True, value_range=(-1, 1))
+    
+    # Add Banner
+    # Construct textual representation of attributes
+    active_attr_names = [config.ATTR_NAMES[i] for i, val in enumerate(specific_attrs) if val == 1]
+    attr_text = ", ".join(active_attr_names) if active_attr_names else "None"
+    
+    add_banner_to_image(save_path, run_name, epoch_info, attr_text)
+    print(f"✅ Image saved to: {save_path}")
+
 
     # Conversion des attributs en texte lisible pour le bandeau
     active_attr_names = [name for name, val in zip(ATTR_NAMES, specific_attrs) if val == 1]

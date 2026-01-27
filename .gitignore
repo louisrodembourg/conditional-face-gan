@@ -32,4 +32,4 @@ coverage.xml
 .DS_Store
 .idea/
 .vscode/
-*.log
+*.log*.docx

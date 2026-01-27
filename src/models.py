@@ -1,8 +1,32 @@
+"""
+GAN Models Module
+=================
+
+This module defines the Generator and Discriminator architectures for the AC-WGAN-GP.
+It uses standard PyTorch `nn.Module` classes.
+
+Classes:
+    Generator: The generator network that produces images from latent vectors and class labels.
+    Discriminator: The discriminator network that classifies images as real/fake and predicts class labels.
+"""
+
 import torch
 import torch.nn as nn
+from typing import Tuple
 
 class Generator(nn.Module):
-    def __init__(self, z_dim, num_classes, img_size=128):
+    """
+    Generator Network.
+
+    This network takes a latent vector z and a class label vector as input,
+    concatenates them, and upsamples them to an image using transposed convolutions.
+
+    Args:
+        z_dim (int): Dimension of the latent vector z.
+        num_classes (int): Number of classes for the conditional input.
+        img_size (int): Target image size. Defaults to 128.
+    """
+    def __init__(self, z_dim: int, num_classes: int, img_size: int = 128):
         super(Generator, self).__init__()
         self.img_size = img_size
         self.input_dim = z_dim + num_classes
@@ -50,10 +74,20 @@ class Generator(nn.Module):
                 nn.Tanh()
             )
         else:
-            # Fallback (non utilisé normalement)
+            # Fallback (unused in current project configuration)
             self.final = nn.Identity()
 
-    def forward(self, noise, labels):
+    def forward(self, noise: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the Generator.
+
+        Args:
+            noise (torch.Tensor): Latent vector (Batch, Z_Dim, 1, 1).
+            labels (torch.Tensor): Class labels (Batch, Num_Classes).
+
+        Returns:
+            torch.Tensor: Generated images (Batch, Channels, Height, Width).
+        """
         labels = labels.view(labels.size(0), labels.size(1), 1, 1)
         x = torch.cat((noise, labels), 1)
         
@@ -69,18 +103,29 @@ class Generator(nn.Module):
         return x
 
 class Discriminator(nn.Module):
-    def __init__(self, num_classes, img_size=128):
+    """
+    Discriminator Network.
+
+    This network takes an image as input and downsamples it.
+    It outputs two things:
+    1. A validity score (how real the image looks).
+    2. A class prediction (multi-label classification).
+
+    Args:
+        num_classes (int): Number of classes to predict.
+        img_size (int): Input image size. Defaults to 128.
+    """
+    def __init__(self, num_classes: int, img_size: int = 128):
         super(Discriminator, self).__init__()
         self.img_size = img_size
         
-        # 128x128 -> 64x64 (Si img_size=128)
+        # 128x128 -> 64x64 
         self.block0 = nn.Sequential(
             nn.Conv2d(3, 32, 4, 2, 1, bias=False),
             nn.LeakyReLU(0.2, inplace=True)
         )
         
         # 64x64 -> 32x32
-        # Si img_size=64, input channels = 3. Si 128, input = 32.
         in_ch = 32 if img_size == 128 else 3
         
         self.block1 = nn.Sequential(
@@ -111,7 +156,18 @@ class Discriminator(nn.Module):
         self.conv_aux = nn.Conv2d(512, num_classes, 4, 1, 0, bias=False)
         
 
-    def forward(self, img):
+    def forward(self, img: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass of the Discriminator.
+
+        Args:
+            img (torch.Tensor): Input images (Batch, C, H, W).
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]:
+                - validity: Real/Fake score (Batch,).
+                - label_preds: Predicted class scores (Batch, Num_Classes).
+        """
         if self.img_size == 128:
             out = self.block0(img)
         else:
