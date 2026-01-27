@@ -1,14 +1,14 @@
 import argparse
 from train import train
-from generate import generate_inference
+from generate import generate_inference, generate_all_combinations
 from config import ATTR_NAMES
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Projet AC-WGAN-GP - Deep Learning")
     
     # Choix du mode : train ou generate
-    parser.add_argument('--mode', type=str, default='train', choices=['train', 'generate'], 
-                        help="Mode d'exécution : 'train' pour lancer l'entraînement, 'generate' pour créer une image.")
+    parser.add_argument('--mode', type=str, default='train', choices=['train', 'generate', 'generate_grid'], 
+                        help="Mode d'exécution : 'train', 'generate' (single), 'generate_grid' (all combos)")
     
     # Arguments spécifiques pour le mode 'generate'
     parser.add_argument('--weights', type=str, default=None, 
@@ -36,3 +36,13 @@ if __name__ == '__main__':
             print("Exemple : python main.py --mode generate --weights checkpoints/run1/netG.pth --attr 1 1 1 0 1")
         else:
             generate_inference(args.weights, args.attr)
+
+    elif args.mode == 'generate_grid':
+        print("====================================")
+        print("     MODE GÉNÉRATION GRILLE         ")
+        print("====================================")
+        
+        if args.weights is None:
+            print("❌ Erreur : Vous devez spécifier un fichier de poids avec --weights")
+        else:
+            generate_all_combinations(args.weights, num_grids=5)
