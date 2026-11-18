@@ -4,7 +4,7 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-This project implements an **Auxiliary Classifier Wasserstein GAN with Gradient Penalty (AC-WGAN-GP)** to generate high-quality human faces with controllable attributes. Trained on the **CelebA dataset**, the model allows for the precise manipulation of specific features such as *Gener*, *Hair Color*, *Smile*, and more.
+This project implements an **Auxiliary Classifier Wasserstein GAN with Gradient Penalty (AC-WGAN-GP)** to generate high-quality human faces with controllable attributes. Trained on the **CelebA dataset**, the model allows for the precise manipulation of specific features such as *Gender*, *Hair Color*, *Smile*, and more.
 
 ## 📌 Project Overview
 
@@ -12,7 +12,7 @@ Generative Adversarial Networks (GANs) are powerful tools for synthesizing reali
 
 ### Key Features
 - **Conditional Generation**: Generate faces based on specific attributes (e.g., "Smiling Young Woman with Blond Hair").
-- **Stable Training**: Uses Wasserstein loss with Gradient Penalty to prevent mode collapse and ensuring smooth gradients.
+- **Stable Training**: Uses Wasserstein loss with Gradient Penalty to prevent mode collapse and keep gradients smooth.
 - **Disentanglement**: Demonstrates the ability to separate style (random noise) from content (attributes).
 - **FID Evaluation**: Integrated Frechet Inception Distance (FID) monitoring to track generation quality.
 
