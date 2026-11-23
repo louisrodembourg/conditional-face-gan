@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
+import warnings
 import torchvision.transforms as transforms
 from PIL import Image
 from config import IMAGE_SIZE, ATTR_NAMES, BATCH_SIZE
@@ -14,7 +15,7 @@ class CustomCelebA(Dataset):
         
         full_df = pd.read_csv(attr_path)
         
-        # Splits : Train (Reste) | Val (2000) | Test (2000)
+        # Splits: Train (rest) | Val (2000) | Test (2000)
         test_len = 2000
         val_len = 2000
         
@@ -39,8 +40,9 @@ class CustomCelebA(Dataset):
         img_path = os.path.join(self.img_dir, img_name)
         try:
             image = Image.open(img_path).convert('RGB')
-        except:
-            return self.__getitem__((idx + 1) % len(self)) # Skip error
+        except (OSError, FileNotFoundError) as e:
+            warnings.warn(f"Could not read {img_path} ({e}), using next image instead.")
+            return self.__getitem__((idx + 1) % len(self))
 
         if self.transform:
             image = self.transform(image)

@@ -178,7 +178,8 @@ class Discriminator(nn.Module):
         out = self.block3(out)
         out = self.block4(out)
         
-        validity = self.conv_critic(out).squeeze()
-        label_preds = self.conv_aux(out).squeeze()
+        # view() instead of squeeze() so a batch of size 1 keeps its batch dimension
+        validity = self.conv_critic(out).view(out.size(0))
+        label_preds = self.conv_aux(out).view(out.size(0), -1)
         
         return validity, label_preds

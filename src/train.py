@@ -26,12 +26,14 @@ from utils import (
     compute_gradient_penalty,
     compute_accuracy,
     LinearDecayLR,
-    make_attribute_grid
+    make_attribute_grid,
+    compute_pos_weight,
+    sample_real_labels,
 )
 from data import get_dataloaders
 
 
-def prepare_fid_folders(netG: nn.Module, test_loader: torch.utils.data.DataLoader, run_name: str, epoch: int) -> Tuple[str, str]:
+def prepare_fid_folders(netG: nn.Module, test_loader: torch.utils.data.DataLoader, run_name: str, epoch: int, label_pool: torch.Tensor) -> Tuple[str, str]:
     """
     Generates real and fake images for Frechet Inception Distance (FID) calculation.
 
@@ -40,6 +42,7 @@ def prepare_fid_folders(netG: nn.Module, test_loader: torch.utils.data.DataLoade
         test_loader (DataLoader): DataLoader for real images.
         run_name (str): Identifier for the current training run.
         epoch (int): Current epoch number.
+        label_pool (torch.Tensor): Real attribute vectors to condition the generator on.
 
     Returns:
         Tuple[str, str]: Paths to the directories containing real and fake images.
@@ -67,8 +70,8 @@ def prepare_fid_folders(netG: nn.Module, test_loader: torch.utils.data.DataLoade
     with torch.no_grad():
         while count < 2000:
             z = torch.randn(config.BATCH_SIZE, config.Z_DIM, 1, 1).to(config.DEVICE)
-            # Random labels
-            labels = (torch.rand(config.BATCH_SIZE, config.NUM_CLASSES) > 0.5).float().to(config.DEVICE)
+            # Labels drawn from the real attribute distribution
+            labels = sample_real_labels(label_pool, config.BATCH_SIZE, config.DEVICE)
             fakes = netG(z, labels)
             for i in range(fakes.size(0)):
                 vutils.save_image(fakes[i], os.path.join(fake_dir, f"{count}.png"), normalize=True, value_range=(-1, 1))
@@ -86,6 +89,8 @@ def train():
     # 1. Data
     print("Loading data...")
     train_loader, val_loader, test_loader = get_dataloaders(config.IMG_DIR, config.ATTR_FILE)
+    # Empirical attribute distribution, used to sample the conditions given to the generator
+    label_pool = torch.tensor(train_loader.dataset.labels, dtype=torch.float32)
     
     # 2. Models
     netG = Generator(config.Z_DIM, config.NUM_CLASSES, img_size=config.IMAGE_SIZE).to(config.DEVICE)
@@ -98,7 +103,12 @@ def train():
     optimizerD = optim.Adam(netD.parameters(), lr=config.LR, betas=(config.BETA1, config.BETA2))
     
     # Weighted Loss for attributes
-    class_weights = torch.tensor(config.CLASS_WEIGHTS).to(config.DEVICE)
+    if config.CLASS_WEIGHTS is None:
+        class_weights = compute_pos_weight(label_pool)
+    else:
+        class_weights = torch.tensor(config.CLASS_WEIGHTS, dtype=torch.float32)
+    class_weights = class_weights.to(config.DEVICE)
+    print("pos_weight per attribute:", dict(zip(config.ATTR_NAMES, [round(w, 2) for w in class_weights.tolist()])))
     cls_criterion = nn.BCEWithLogitsLoss(pos_weight=class_weights)
     
     # Schedulers
@@ -106,14 +116,14 @@ def train():
     schedulerD = torch.optim.lr_scheduler.LambdaLR(optimizerD, lr_lambda=LinearDecayLR(config.NUM_EPOCHS, 0, config.DECAY_START_EPOCH).step)
 
     # 4. Logging
-    run_name = datetime.now().strftime("%Y-%m-%d_%H-%M_V3_ULTIMATE")
+    run_name = f"{datetime.now().strftime('%Y-%m-%d_%H-%M')}_{config.RUN_TAG}"
     writer = SummaryWriter(os.path.join(config.LOG_DIR, run_name))
     ckpt_path = os.path.join(config.CKPT_DIR, run_name)
     os.makedirs(ckpt_path, exist_ok=True)
     
     # Fixed Visualization Vectors
     fixed_z = torch.randn(64, config.Z_DIM, 1, 1).to(config.DEVICE)
-    fixed_labels = (torch.rand(64, config.NUM_CLASSES) > 0.5).float().to(config.DEVICE)
+    fixed_labels = sample_real_labels(label_pool, 64, config.DEVICE)
     
     best_fid = float('inf')
     print(f"🚀 Starting Run: {run_name}")
@@ -136,7 +146,7 @@ def train():
             
             # Fake
             z = torch.randn(b_size, config.Z_DIM, 1, 1).to(config.DEVICE)
-            fake_labels_in = (torch.rand(b_size, config.NUM_CLASSES) > 0.5).float().to(config.DEVICE)
+            fake_labels_in = sample_real_labels(label_pool, b_size, config.DEVICE)
             fake_imgs = netG(z, fake_labels_in)
             
             fake_validity, _ = netD(fake_imgs.detach())
@@ -147,7 +157,7 @@ def train():
             
             d_loss = d_loss_real + d_loss_fake + config.LAMBDA_GP * gp + config.LAMBDA_CLS * d_loss_cls
             
-            # --- CALCUL ACCURACY (REAL) ---
+            # --- ACCURACY (REAL) ---
             acc_real = compute_accuracy(real_cls, real_labels)
             
             d_loss.backward()
@@ -161,7 +171,7 @@ def train():
                 g_loss_adv = -torch.mean(fake_validity)
                 g_loss_cls = cls_criterion(fake_cls, fake_labels_in)
                 
-                # --- CALCUL ACCURACY (FAKE) ---
+                # --- ACCURACY (FAKE) ---
                 acc_fake = compute_accuracy(fake_cls, fake_labels_in)
                 
                 g_loss = g_loss_adv + config.LAMBDA_CLS * g_loss_cls
@@ -213,7 +223,7 @@ def train():
         # FID Check (Every few epochs)
         if epoch > 0 and epoch % config.FID_INTERVAL == 0:
             try:
-                r_dir, f_dir = prepare_fid_folders(netG, test_loader, run_name, epoch)
+                r_dir, f_dir = prepare_fid_folders(netG, test_loader, run_name, epoch, label_pool)
                 cmd = f"python -m pytorch_fid \"{r_dir}\" \"{f_dir}\" --device {config.DEVICE.type}"
                 result = subprocess.check_output(cmd, shell=True).decode()
                 fid = float(result.split('FID:')[-1].strip())

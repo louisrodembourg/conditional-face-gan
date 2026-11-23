@@ -66,11 +66,12 @@ LAMBDA_CLS = 10.0      # Classification loss coefficient (Control attribute stre
 ATTR_NAMES = ['Male', 'Blond_Hair', 'Smiling', 'Eyeglasses', 'Young']
 NUM_CLASSES = len(ATTR_NAMES)
 
-# Class weights to handle dataset imbalance (e.g. Eyeglasses are rare)
-# Order corresponds to ATTR_NAMES
-class_counts = [1.0, 3.0, 1.0, 15.0, 1.0] # Heuristic weights
-CLASS_WEIGHTS = class_counts
+# Class weights (BCE pos_weight) to handle dataset imbalance (e.g. Eyeglasses are rare).
+# None -> computed automatically from the training set as (#negatives / #positives) per attribute.
+# Set a list (same order as ATTR_NAMES) to override manually.
+CLASS_WEIGHTS = None
 
 # --- SCHEDULING & LOGGING ---
 DECAY_START_EPOCH = 25 # Epoch to start linear learning rate decay
 FID_INTERVAL = 5       # Calculate FID every X epochs (expensive operation)
+RUN_TAG = "acwgan_gp"  # Suffix appended to the timestamped run name
