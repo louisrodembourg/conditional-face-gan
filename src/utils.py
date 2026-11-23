@@ -65,6 +65,22 @@ def compute_accuracy(preds, labels):
     correct = (predicted_labels == labels).float()
     return correct.mean()
 
+def compute_pos_weight(labels):
+    """pos_weight for BCEWithLogitsLoss: (#negatives / #positives) per attribute."""
+    labels = torch.as_tensor(labels, dtype=torch.float32)
+    pos = labels.sum(dim=0).clamp(min=1.0)
+    neg = labels.size(0) - pos
+    return neg / pos
+
+def sample_real_labels(label_pool, n, device):
+    """
+    Samples n attribute vectors from the empirical label distribution (rows of the dataset).
+    Keeps rare attributes (e.g. Eyeglasses) at their real frequency and only produces
+    attribute combinations that actually exist, instead of independent Bernoulli(0.5) draws.
+    """
+    idx = torch.randint(0, label_pool.size(0), (n,))
+    return label_pool[idx].to(device)
+
 # 5. Scheduler
 class LinearDecayLR:
     def __init__(self, n_epochs, offset, decay_start_epoch):

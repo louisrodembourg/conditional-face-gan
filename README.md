@@ -30,8 +30,8 @@ The loss function combines the Wasserstein distance, Gradient Penalty, and Binar
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/cgan-celeba.git
-cd cgan-celeba
+git clone https://github.com/louisrodembourg/conditional-face-gan.git
+cd conditional-face-gan
 ```
 
 ### 2. Environment Setup
@@ -45,7 +45,7 @@ pip install -e .
 ### 3. Dataset Preparation
 Download the **CelebA** dataset and place `img_align_celeba` and `list_attr_celeba.csv` in the `data/` directory.
 ```
-cgan-celeba/
+conditional-face-gan/
 ├── data/
 │   ├── img_align_celeba/
 │   │   └── img_align_celeba/
@@ -61,7 +61,7 @@ To train the model from scratch:
 ```bash
 python src/main.py --mode train
 ```
-*Checkpoints and logs (TensorBoard) will be saved in `checkpoints/` and `logs/` respectively.*
+*Checkpoints and logs (TensorBoard) are saved in `checkpoints/<run_name>/` and `logs/<run_name>/`. The generator with the lowest FID is saved as `checkpoints/<run_name>/best_fid_model.pth`.*
 
 ### Inference / Generation
 Generate images using a trained model.
@@ -70,13 +70,13 @@ Generate images using a trained model.
 ```bash
 # Example: Generate a Smiling(1) Young(1) Woman(0) with Blond Hair(1) and Eyeglasses(0)
 # Attribute Order: [Male, Blond_Hair, Smiling, Eyeglasses, Young]
-python src/main.py --mode generate --weights checkpoints/best_model.pth --attr 0 1 1 0 1
+python src/main.py --mode generate --weights checkpoints/<run_name>/best_fid_model.pth --attr 0 1 1 0 1
 ```
 
 **Grid Generation:**
 Generates a grid of all attribute combinations for visualization.
 ```bash
-python src/main.py --mode generate_grid --weights checkpoints/best_model.pth
+python src/main.py --mode generate_grid --weights checkpoints/<run_name>/best_fid_model.pth
 ```
 
 ## 📊 Results & Visualization
@@ -108,6 +108,8 @@ This grid demonstrates the model's capability to maintain identity while swappin
 │   ├── models.py        # Generator & Discriminator Architecture
 │   ├── train.py         # Training Loop
 │   ├── data.py          # Data Loading & Preprocessing
+│   ├── utils.py         # Gradient penalty, metrics, label sampling, visualization
+│   ├── generate.py      # Inference & annotated grid generation
 │   └── main.py          # Entry point
 ├── notebooks/           # Jupyter Notebooks for analysis
 ├── pyproject.toml       # Project Dependencies
@@ -115,4 +117,4 @@ This grid demonstrates the model's capability to maintain identity while swappin
 ```
 
 ## 📝 License
-This project is licensed under the MIT License.
+This project is licensed under the MIT License — see [LICENSE](LICENSE).
